@@ -8,7 +8,6 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import boto3
-import tarfile
 
 import argparse
 
@@ -24,6 +23,7 @@ import smdebug.pytorch as smd
 s3 = boto3.client('s3')
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 
 def test(model, test_loader,criterion,hook):
     '''
@@ -167,29 +167,11 @@ def main(args):
     # Train Data
     bucket_name = 'myimageclassificationbucket'
     key_train = "train/"
-    response = s3.get_object(Bucket=bucket_name, Key=key_train)
-    # Write the object to a local file
-    with open('train-data.tar', 'wb') as f:
-        f.write(response['Body'].read())
-
-    # Extract the tar file
-    with tarfile.open('train-data.tar', 'r') as tar:
-        tar.extractall()
     train_dataset = datasets.ImageFolder('train-data', transform=transform)
     
     # Test Data
     bucket_name = 'myimageclassificationbucket'
     key_test = 'test/'
-
-    response = s3.get_object(Bucket=bucket_name, Key=key_test)
-    # Write the object to a local file
-    with open('test-data.tar', 'wb') as f:
-        f.write(response['Body'].read())
-
-    # Extract the tar file
-    with tarfile.open('test-data.tar', 'r') as tar:
-        tar.extractall()
-
     test_dataset = datasets.ImageFolder("test-data", transform=transform)
     
     
