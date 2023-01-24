@@ -8,6 +8,7 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import boto3
+import tarfile
 
 import argparse
 
@@ -165,29 +166,31 @@ def main(args):
     
     # Train Data
     bucket_name = 'myimageclassificationbucket'
-    folder_prefix = 'train'
+    key_train = "train/"
+    response = s3.get_object(Bucket=bucket_name, Key=key_train)
+    # Write the object to a local file
+    with open('train-data.tar', 'wb') as f:
+        f.write(response['Body'].read())
 
-    # use the S3 client to list all objects in the specified folder
-    objects = s3.list_objects(Bucket=bucket_name, Prefix=folder_prefix)
-
-    # download each object in the folder to the local machine
-    for obj in objects['Contents']:
-        s3.download_file(bucket_name, obj['Key'], obj['Key'])
-    
-    
-    train_dataset = datasets.ImageFolder(root='myimageclassificationbucket/train/')
+    # Extract the tar file
+    with tarfile.open('train-data.tar', 'r') as tar:
+        tar.extractall()
+    train_dataset = datasets.ImageFolder('train-data', transform=transform)
     
     # Test Data
     bucket_name = 'myimageclassificationbucket'
-    folder_prefix = 'test'
+    key_test = 'test/'
 
-    # use the S3 client to list all objects in the specified folder
-    objects = s3.list_objects(Bucket=bucket_name, Prefix=folder_prefix)
+    response = s3.get_object(Bucket=bucket_name, Key=key_test)
+    # Write the object to a local file
+    with open('test-data.tar', 'wb') as f:
+        f.write(response['Body'].read())
 
-    # download each object in the folder to the local machine
-    for obj in objects['Contents']:
-        s3.download_file(bucket_name, obj['Key'], obj['Key'])
-    test_dataset = datasets.ImageFolder(root='myimageclassificationbucket/test/')
+    # Extract the tar file
+    with tarfile.open('test-data.tar', 'r') as tar:
+        tar.extractall()
+
+    test_dataset = datasets.ImageFolder("test-data", transform=transform)
     
     
     data = {"train":train_dataset, "test":test_dataset}
