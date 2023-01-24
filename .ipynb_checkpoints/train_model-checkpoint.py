@@ -10,23 +10,34 @@ import boto3
 
 import argparse
 
-#TODO: Import dependencies for Debugging andd Profiling
+# For Profiling
+from smdebug import modes
+from smdebug.profiler.utils import str2bool
+from smdebug.pytorch import get_hook
+
+#  For Debugging
+import smdebug.pytorch as smd
+
 
 s3 = boto3.client('s3')
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-def test(model, test_loader,criterion):
+def test(model, test_loader,criterion,hook):
     '''
     This function takes two arguments and returns None
     
     Parameters:
         -model: Trained Image Classification Network
         -test_loader: DataLoader for test dataset
+        -hook: hook for saving model tensors during testing for ananlyzing model behavior
         
     Returns:
-        Trained Image Classification Model
+        None
     '''
+    
+    # Setting SMDEBUG hook for testing Phase
+    hook.set_mode(smd.modes.EVAL)
     test_loss = 0
     correct = 0
     with torch.no_grad():
@@ -44,9 +55,9 @@ def test(model, test_loader,criterion):
         )
     )
 
-def train(model, train_loader, criterion, optimizer, epoch):
+def train(model, train_loader, criterion, optimizer, epoch,hook):
     '''
-    This function takes five arguments and returns Model
+    This function takes five arguments and returns None
     
     Parameters:
         -model: Untrained Image Classification Network
@@ -54,11 +65,13 @@ def train(model, train_loader, criterion, optimizer, epoch):
         -criterion: Loss Function
         -optimizer: The optimization algorithm to use
         -epoch: Epoch Number
+        -hook: hook for saving model tensors during training for ananlyzing model behavior
         
     Returns:
-        Trained Image Classification Model
+        None
     '''
-    
+    # Setting SMDEBUG hook for model training loop
+    hook.set_mode(smd.modes.TRAIN)
     for batch_idx, (data, target) in enumerate(train_loader):
         model_ft = model_ft.to(device)
         data = data.to(device)
@@ -79,27 +92,26 @@ def train(model, train_loader, criterion, optimizer, epoch):
                 )
             )
 
-    return model
     
-def net():
+def net(args):
     '''
-    This function takes zero parameters and returns a Network
+    This function takes one parameters and returns a Network
     
     Parameters:
-        None
+        args: Command Line Arguments
         
     Returns:
         Untrained Image Classification Model
         
     '''
-    pretrained_model = models.InceptionResNetV2(include_top=False,weights='imagenet',pooling='avg')
+    pretrained_model = models.__dict__[args.model](pretrained=True))
     
     
-#     Freezing Pretrained Weights
+    # Freezing Pretrained Weights
     for param in pretrained_model.parameters():
         param.requires_grad = False
     
-#     Append Fully_Connected layer
+    # Append Fully_Connected layer
     num_ftrs = pretrained_model.fc.in_features
     pretrained_model.fc = nn.Linear(num_ftrs, 10)
 
@@ -129,16 +141,21 @@ def create_data_loaders(data, batch_size):
     
 def main(args):
 
-#     Initializing Model
-    model = net()
+    # Initializing Model
+    model = net(args)
     
-#     Creating Loss Function and optimizer
+    ##################Debugging###################
+    # Registering SMDEBUG hook to save output tensors.
+    hook = smd.Hook.create_from_json_file()
+    hook.register_hook(model)
+    ##############################################
+    
+    # Creating Loss Function and optimizer
     loss_criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     
     
-#     Read Dataset
-
+    # Read Dataset
     normalize = transforms.Normalize(mean = [0.485, 0.456, 0.406],
                                     std = [0.229, 0.224, 0.225])
 
@@ -152,12 +169,9 @@ def main(args):
     TODO: Call the train function to start training your model
     Remember that you will need to set up a way to get training data from S3
     '''
-    model = train(model, train_loader, loss_criterion, optimizer,args.epochs)
-    
-    '''
-    TODO: Test the model to see its accuracy
-    '''
-    test(model, test_loader, criterion)
+    for epoch in range(len(args.epochs)):
+        train(model, train_loader, loss_criterion, optimizer, epoch, hook)
+        test(model, test_loader, criterion, hook)
     
     '''
     TODO: Save the trained model
@@ -165,7 +179,7 @@ def main(args):
     torch.save(model, "classificationmodel.pt")
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Deep Learning on Amazon Sagemaker")
     parser.add_argument("--batch-size",
                         type=int,
                         default=64,
@@ -175,7 +189,7 @@ if __name__=='__main__':
     
     parser.add_argument("--epochs",
                        type=int,
-                       default=100,
+                       default=3,
                        metavar="N",
                        help="input batch size for training (default: 64)"
                        )
@@ -185,7 +199,15 @@ if __name__=='__main__':
                    metavar="LR",
                    help="learning rate (default: 1.0)",
                    )
+    parser.add_argument("--model", 
+                        type=str, 
+                        default="InceptionResNetV2")
     
-    args=parser.parse_args()
+    args = parser.parse_args()
+    
+    #  Printing Arguments
+    for key, value in vars(opt).items():
+        print(f"{key}:{value}")
+    
     
     main(args)
