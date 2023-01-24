@@ -6,6 +6,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.models as models
 import torchvision.transforms as transforms
+import torchvision.datasets as datasets
 import boto3
 
 import argparse
@@ -104,8 +105,7 @@ def net(args):
         Untrained Image Classification Model
         
     '''
-    pretrained_model = models.__dict__[args.model](pretrained=True))
-    
+    pretrained_model = models.resnet18(pretrained=True)
     
     # Freezing Pretrained Weights
     for param in pretrained_model.parameters():
@@ -113,7 +113,7 @@ def net(args):
     
     # Append Fully_Connected layer
     num_ftrs = pretrained_model.fc.in_features
-    pretrained_model.fc = nn.Linear(num_ftrs, 10)
+    pretrained_model.fc = nn.Linear(num_ftrs, 133)
 
     model_ft = pretrained_model.to(device)
     
@@ -133,8 +133,8 @@ def create_data_loaders(data, batch_size):
         Dataloader i.e Train and test
     '''
     
-    train_dataset_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=True, num_workers=1)
-    test_dataset_loader  = torch.utils.data.DataLoader(data , batch_size=batch_size, shuffle=False,num_workers=1)
+    train_dataset_loader = torch.utils.data.DataLoader(data["train"], batch_size=batch_size, shuffle=True, num_workers=1)
+    test_dataset_loader  = torch.utils.data.DataLoader(data["test"] , batch_size=batch_size, shuffle=False,num_workers=1)
     dataloaders = {'train': train_dataset_loader, 'test': test_dataset_loader}
     
     return dataloaders
@@ -155,13 +155,42 @@ def main(args):
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     
     
-    # Read Dataset
+    # Data Transformations
     normalize = transforms.Normalize(mean = [0.485, 0.456, 0.406],
                                     std = [0.229, 0.224, 0.225])
 
     transform = transforms.Compose(
-        [transforms.ToTensor(), normalize]
+        [transforms.Resize((224, 224)),transforms.ToTensor(), normalize]
     )
+    
+    # Train Data
+    bucket_name = 'myimageclassificationbucket'
+    folder_prefix = 'train'
+
+    # use the S3 client to list all objects in the specified folder
+    objects = s3.list_objects(Bucket=bucket_name, Prefix=folder_prefix)
+
+    # download each object in the folder to the local machine
+    for obj in objects['Contents']:
+        s3.download_file(bucket_name, obj['Key'], obj['Key'])
+    
+    
+    train_dataset = datasets.ImageFolder(root='myimageclassificationbucket/train/')
+    
+    # Test Data
+    bucket_name = 'myimageclassificationbucket'
+    folder_prefix = 'test'
+
+    # use the S3 client to list all objects in the specified folder
+    objects = s3.list_objects(Bucket=bucket_name, Prefix=folder_prefix)
+
+    # download each object in the folder to the local machine
+    for obj in objects['Contents']:
+        s3.download_file(bucket_name, obj['Key'], obj['Key'])
+    test_dataset = datasets.ImageFolder(root='myimageclassificationbucket/test/')
+    
+    
+    data = {"train":train_dataset, "test":test_dataset}
     
     create_data_loaders(data,args.batch_size)
     
@@ -199,14 +228,11 @@ if __name__=='__main__':
                    metavar="LR",
                    help="learning rate (default: 1.0)",
                    )
-    parser.add_argument("--model", 
-                        type=str, 
-                        default="InceptionResNetV2")
     
     args = parser.parse_args()
     
     #  Printing Arguments
-    for key, value in vars(opt).items():
+    for key, value in vars(args).items():
         print(f"{key}:{value}")
     
     
