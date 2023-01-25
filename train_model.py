@@ -11,6 +11,8 @@ import boto3
 from torch.utils.data import Dataset
 import tempfile
 from PIL import Image
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import argparse
 
@@ -50,7 +52,6 @@ class ImageDataset(Dataset):
         for i in self.files:
             if i not in self.labels.keys():
                 self.labels[i.split('/')[1]]  =  int(i.split('/')[1][0:3]) - 1
-        print(self.labels)
 
     def __len__(self):
         return len(self.files)
@@ -78,8 +79,9 @@ class ImageDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        imagelabel = torch.zeros(133)
-        imagelabel[self.labels[mylabel]] = 1
+        # imagelabel = torch.zeros(133)
+        # imagelabel[self.labels[mylabel]] = 1
+        imagelabel = self.labels[mylabel]
             
         return image, imagelabel
     
@@ -111,6 +113,9 @@ def test(model, test_loader,criterion,hook):
     correct = 0
     with torch.no_grad():
         for data, target in test_loader:
+            data = data.to(device)
+            target = target.to(device)
+            data = model(data)
             output = model(data)
             test_loss += criterion(output,target,reduction="sum").item() # sum up batch loss
             pred = output.argmax(dim=1,keepdim=True) # get the index of the max log-probability
@@ -146,7 +151,7 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
         data = data.to(device)
         target = target.to(device)
         optimizer.zero_grad()
-        output = model(data)
+        output = model_ft(data)
         loss = criterion(output, target)
         loss.backward()
         optimizer.step()
@@ -236,7 +241,7 @@ def main(args):
     '''
     for epoch in range(args.epochs):
         train(model, dataloaders['train'], loss_criterion, optimizer, epoch, hook)
-        test(model, dataloaders['test'], criterion, hook)
+        test(model, dataloaders['test'], loss_criterion, hook)
     
     '''
     TODO: Save the trained model
