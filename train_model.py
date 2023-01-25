@@ -8,8 +8,12 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import boto3
+from torch.utils.data import Dataset
+import tempfile
+from PIL import Image
 
 import argparse
+
 
 # For Profiling
 from smdebug import modes
@@ -18,6 +22,69 @@ from smdebug.pytorch import get_hook
 
 #  For Debugging
 import smdebug.pytorch as smd
+
+##############################Dataset Class##################################
+
+# source = https://stackoverflow.com/questions/54003052/how-do-i-implement-a-pytorch-dataset-for-use-with-aws-sagemaker
+
+class ImageDataset(Dataset):
+    def __init__(self, path , Train=True, transform = None):
+        self.path = path
+        self.s3 = boto3.resource('s3')
+        self.bucket = self.s3.Bucket(path)
+        if Train:
+            self.files = [obj.key for obj in self.bucket.objects.all() if "train" in obj.key and ".jpg" in obj.key]
+        else:
+            self.files = [obj.key for obj in self.bucket.objects.all() if "test" in obj.key and ".jpg" in obj.key]  
+        
+        self.transform = transform
+        if transform is None:
+            self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean = [0.485, 0.456, 0.406],
+                                    std = [0.229, 0.224, 0.225])
+            ])
+        
+        self.labels = {}
+        for i in self.files:
+            if i not in self.labels.keys():
+                self.labels[i.split('/')[1]]  =  int(i.split('/')[1][0:3]) - 1
+        print(self.labels)
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        img_name = self.files[idx]
+
+        # we may infer the label from the filename
+
+        mylabel = img_name.split('/')[1]
+
+        # we need to download the file from S3 to a temporary file locally
+        # we need to create the local file name
+        obj = self.bucket.Object(img_name)
+        tmp = tempfile.NamedTemporaryFile()
+        tmp_name = '{}.jpg'.format(tmp.name)
+
+        # now we can actually download from S3 to a local place
+        with open(tmp_name, 'wb') as f:
+            obj.download_fileobj(f)
+            f.flush()
+            f.close()
+            image = Image.open(tmp_name)
+
+        if self.transform:
+            image = self.transform(image)
+
+        imagelabel = torch.zeros(133)
+        imagelabel[self.labels[mylabel]] = 1
+            
+        return image, imagelabel
+    
+    
+##############################-------------##################################
 
 
 s3 = boto3.client('s3')
@@ -75,7 +142,7 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
     # Setting SMDEBUG hook for model training loop
     hook.set_mode(smd.modes.TRAIN)
     for batch_idx, (data, target) in enumerate(train_loader):
-        model_ft = model_ft.to(device)
+        model_ft = model.to(device)
         data = data.to(device)
         target = target.to(device)
         optimizer.zero_grad()
@@ -156,36 +223,20 @@ def main(args):
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     
     
-    # Data Transformations
-    normalize = transforms.Normalize(mean = [0.485, 0.456, 0.406],
-                                    std = [0.229, 0.224, 0.225])
-
-    transform = transforms.Compose(
-        [transforms.Resize((224, 224)),transforms.ToTensor(), normalize]
-    )
-    
-    # Train Data
-    bucket_name = 'myimageclassificationbucket'
-    key_train = "train/"
-    train_dataset = datasets.ImageFolder('train-data', transform=transform)
-    
-    # Test Data
-    bucket_name = 'myimageclassificationbucket'
-    key_test = 'test/'
-    test_dataset = datasets.ImageFolder("test-data", transform=transform)
-    
+    train_dataset = ImageDataset("myimageclassificationbucket",Train=True)
+    test_dataset = ImageDataset("myimageclassificationbucket",Train=False)
     
     data = {"train":train_dataset, "test":test_dataset}
     
-    create_data_loaders(data,args.batch_size)
+    dataloaders = create_data_loaders(data,args.batch_size)
     
     '''
     TODO: Call the train function to start training your model
     Remember that you will need to set up a way to get training data from S3
     '''
-    for epoch in range(len(args.epochs)):
-        train(model, train_loader, loss_criterion, optimizer, epoch, hook)
-        test(model, test_loader, criterion, hook)
+    for epoch in range(args.epochs):
+        train(model, dataloaders['train'], loss_criterion, optimizer, epoch, hook)
+        test(model, dataloaders['test'], criterion, hook)
     
     '''
     TODO: Save the trained model
