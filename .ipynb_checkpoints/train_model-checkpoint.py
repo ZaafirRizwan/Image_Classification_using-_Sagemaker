@@ -111,13 +111,14 @@ def test(model, test_loader,criterion,hook):
     hook.set_mode(smd.modes.EVAL)
     test_loss = 0
     correct = 0
+    loss = 0
     with torch.no_grad():
         for data, target in test_loader:
             data = data.to(device)
             target = target.to(device)
-            data = model(data)
             output = model(data)
-            test_loss += criterion(output,target,reduction="sum").item() # sum up batch loss
+            loss = criterion(output,target)
+            test_loss += loss.sum().item() # sum up batch loss
             pred = output.argmax(dim=1,keepdim=True) # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
             
@@ -224,7 +225,7 @@ def main(args):
     ##############################################
     
     # Creating Loss Function and optimizer
-    loss_criterion = nn.CrossEntropyLoss()
+    loss_criterion = nn.CrossEntropyLoss(reduction='sum')
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     
     
