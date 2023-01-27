@@ -145,6 +145,10 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
     Returns:
         None
     '''
+    
+    if hook:
+        hook.register_loss(optimizer)
+    
     # Setting SMDEBUG hook for model training loop
     hook.set_mode(smd.modes.TRAIN)
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -226,7 +230,7 @@ def main(args):
     
     # Creating Loss Function and optimizer
     loss_criterion = nn.CrossEntropyLoss(reduction='sum')
-    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
     
     
     train_dataset = ImageDataset("myimageclassificationbucket",Train=True)
