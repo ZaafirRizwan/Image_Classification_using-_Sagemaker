@@ -20,7 +20,7 @@ import argparse
 # For Profiling
 from smdebug import modes
 from smdebug.profiler.utils import str2bool
-from smdebug.pytorch import get_hook
+import smdebug.pytorch as smd
 
 #  For Debugging
 import smdebug.pytorch as smd
@@ -220,7 +220,7 @@ def main(args):
     
     ##################Debugging###################
     # Registering SMDEBUG hook to save output tensors.
-    hook = smd.Hook.create_from_json_file()
+    hook=smd.get_hook(create_if_not_exists=True)
     hook.register_hook(model)
     ##############################################
     

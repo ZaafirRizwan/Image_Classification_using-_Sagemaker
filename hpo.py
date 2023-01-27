@@ -19,8 +19,7 @@ import argparse
 
 # For Profiling
 from smdebug import modes
-from smdebug.profiler.utils import str2bool
-from smdebug.pytorch import get_hook
+from smdebug.profiler.utils import str2bool 
 
 #  For Debugging
 import smdebug.pytorch as smd
@@ -94,21 +93,17 @@ s3 = boto3.client('s3')
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-def test(model, test_loader,criterion,hook):
+def test(model, test_loader,criterion):
     '''
     This function takes two arguments and returns None
     
     Parameters:
         -model: Trained Image Classification Network
         -test_loader: DataLoader for test dataset
-        -hook: hook for saving model tensors during testing for ananlyzing model behavior
         
     Returns:
         None
     '''
-    
-    # Setting SMDEBUG hook for testing Phase
-    hook.set_mode(smd.modes.EVAL)
     test_loss = 0
     correct = 0
     loss = 0
@@ -130,7 +125,7 @@ def test(model, test_loader,criterion,hook):
         )
     )
 
-def train(model, train_loader, criterion, optimizer, epoch,hook):
+def train(model, train_loader, criterion, optimizer, epoch):
     '''
     This function takes five arguments and returns None
     
@@ -140,13 +135,10 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
         -criterion: Loss Function
         -optimizer: The optimization algorithm to use
         -epoch: Epoch Number
-        -hook: hook for saving model tensors during training for ananlyzing model behavior
         
     Returns:
         None
     '''
-    # Setting SMDEBUG hook for model training loop
-    hook.set_mode(smd.modes.TRAIN)
     for batch_idx, (data, target) in enumerate(train_loader):
         model_ft = model.to(device)
         data = data.to(device)
@@ -220,8 +212,8 @@ def main(args):
     
     ##################Debugging###################
     # Registering SMDEBUG hook to save output tensors.
-    hook = smd.Hook.create_from_json_file()
-    hook.register_hook(model)
+    # hook=smd.get_hook(create_if_not_exists=True)
+    # hook.register_hook(model)
     ##############################################
     
     # Creating Loss Function and optimizer
@@ -241,8 +233,8 @@ def main(args):
     Remember that you will need to set up a way to get training data from S3
     '''
     for epoch in range(args.epochs):
-        train(model, dataloaders['train'], loss_criterion, optimizer, epoch, hook)
-        test(model, dataloaders['test'], loss_criterion, hook)
+        train(model, dataloaders['train'], loss_criterion, optimizer, epoch)
+        test(model, dataloaders['test'], loss_criterion)
     
     '''
     TODO: Save the trained model
