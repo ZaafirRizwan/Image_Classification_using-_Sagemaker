@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision
+import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -24,6 +25,21 @@ import smdebug.pytorch as smd
 
 #  For Debugging
 import smdebug.pytorch as smd
+
+
+import subprocess
+
+# Define the S3 bucket and local directory
+bucket_name = 'myimageclassificationbucket'
+local_dir = './'
+
+# Construct the sync command as a list of arguments
+cmd = ['aws', 's3', 'sync', 's3://' + bucket_name, local_dir]
+
+# Run the command using subprocess.run
+subprocess.run(cmd)
+
+
 
 ##############################Dataset Class##################################
 
@@ -94,7 +110,7 @@ s3 = boto3.client('s3')
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-def test(model, test_loader,criterion,hook):
+def test(model, test_loader,hook):
     '''
     This function takes two arguments and returns None
     
@@ -117,8 +133,7 @@ def test(model, test_loader,criterion,hook):
             data = data.to(device)
             target = target.to(device)
             output = model(data)
-            loss = criterion(output,target)
-            test_loss += loss.sum().item() # sum up batch loss
+            test_loss += F.nll_loss(output, target, reduction="sum").item() # sum up batch loss
             pred = output.argmax(dim=1,keepdim=True) # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
             
@@ -130,7 +145,7 @@ def test(model, test_loader,criterion,hook):
         )
     )
 
-def train(model, train_loader, criterion, optimizer, epoch,hook):
+def train(model, train_loader, optimizer, epoch,hook):
     '''
     This function takes five arguments and returns None
     
@@ -146,9 +161,6 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
         None
     '''
     
-    if hook:
-        hook.register_loss(optimizer)
-    
     # Setting SMDEBUG hook for model training loop
     hook.set_mode(smd.modes.TRAIN)
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -157,7 +169,7 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
         target = target.to(device)
         optimizer.zero_grad()
         output = model_ft(data)
-        loss = criterion(output, target)
+        loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
         if batch_idx % 100 == 0:
@@ -192,6 +204,7 @@ def net(args):
     # Append Fully_Connected layer
     num_ftrs = pretrained_model.fc.in_features
     pretrained_model.fc = nn.Linear(num_ftrs, 133)
+    
 
     model_ft = pretrained_model.to(device)
     
@@ -224,17 +237,32 @@ def main(args):
     
     ##################Debugging###################
     # Registering SMDEBUG hook to save output tensors.
-    hook=smd.get_hook(create_if_not_exists=True)
+    hook = smd.Hook.create_from_json_file()
     hook.register_hook(model)
     ##############################################
     
+    
     # Creating Loss Function and optimizer
-    loss_criterion = nn.CrossEntropyLoss(reduction='sum')
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
     
     
-    train_dataset = ImageDataset("myimageclassificationbucket",Train=True)
-    test_dataset = ImageDataset("myimageclassificationbucket",Train=False)
+    # if hook:
+    #     hook.register_loss(loss_criterion)
+    
+    
+    # train_dataset = ImageDataset("myimageclassificationbucket",Train=True)
+    # test_dataset = ImageDataset("myimageclassificationbucket",Train=False)
+    
+    transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean = [0.485, 0.456, 0.406],
+                                    std = [0.229, 0.224, 0.225])
+            ])
+    
+    train_dataset = torchvision.datasets.ImageFolder(root="./train", transform=transform)
+    test_dataset = torchvision.datasets.ImageFolder(root="./test", transform=transform)
+    
     
     data = {"train":train_dataset, "test":test_dataset}
     
@@ -245,13 +273,13 @@ def main(args):
     Remember that you will need to set up a way to get training data from S3
     '''
     for epoch in range(args.epochs):
-        train(model, dataloaders['train'], loss_criterion, optimizer, epoch, hook)
-        test(model, dataloaders['test'], loss_criterion, hook)
+        train(model, dataloaders['train'], optimizer, epoch, hook)
+        test(model, dataloaders['test'], hook)
     
     '''
     TODO: Save the trained model
     '''
-    torch.save(model, "classificationmodel.pt")
+    torch.save(model.state_dict(), "classificationmodel.pt")
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description="Deep Learning on Amazon Sagemaker")
