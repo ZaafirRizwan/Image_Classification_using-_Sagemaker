@@ -13,8 +13,15 @@ import tempfile
 from PIL import Image
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+import json
+import os
 
 import argparse
+import subprocess
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 # For Profiling
@@ -24,73 +31,33 @@ from smdebug.profiler.utils import str2bool
 #  For Debugging
 import smdebug.pytorch as smd
 
-##############################Dataset Class##################################
+# Define the S3 bucket and local directory
+bucket_name = 'myimageclassificationbucket'
+local_dir = './'
 
-# source = https://stackoverflow.com/questions/54003052/how-do-i-implement-a-pytorch-dataset-for-use-with-aws-sagemaker
+# Construct the sync command as a list of arguments
+cmd = ['aws', 's3', 'sync', 's3://' + bucket_name, local_dir]
+subprocess.run(cmd,stdout=subprocess. DEVNULL)
 
-class ImageDataset(Dataset):
-    def __init__(self, path , Train=True, transform = None):
-        self.path = path
-        self.s3 = boto3.resource('s3')
-        self.bucket = self.s3.Bucket(path)
-        if Train:
-            self.files = [obj.key for obj in self.bucket.objects.all() if "train" in obj.key and ".jpg" in obj.key]
-        else:
-            self.files = [obj.key for obj in self.bucket.objects.all() if "test" in obj.key and ".jpg" in obj.key]  
-        
-        self.transform = transform
-        if transform is None:
-            self.transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean = [0.485, 0.456, 0.406],
-                                    std = [0.229, 0.224, 0.225])
-            ])
-        
-        self.labels = {}
-        for i in self.files:
-            if i not in self.labels.keys():
-                self.labels[i.split('/')[1]]  =  int(i.split('/')[1][0:3]) - 1
-
-    def __len__(self):
-        return len(self.files)
-
-    def __getitem__(self, idx):
-        img_name = self.files[idx]
-
-        # we may infer the label from the filename
-
-        mylabel = img_name.split('/')[1]
-
-        # we need to download the file from S3 to a temporary file locally
-        # we need to create the local file name
-        obj = self.bucket.Object(img_name)
-        tmp = tempfile.NamedTemporaryFile()
-        tmp_name = '{}.jpg'.format(tmp.name)
-
-        # now we can actually download from S3 to a local place
-        with open(tmp_name, 'wb') as f:
-            obj.download_fileobj(f)
-            f.flush()
-            f.close()
-            image = Image.open(tmp_name)
-
-        if self.transform:
-            image = self.transform(image)
-
-        # imagelabel = torch.zeros(133)
-        # imagelabel[self.labels[mylabel]] = 1
-        imagelabel = self.labels[mylabel]
-            
-        return image, imagelabel
-    
-    
-##############################-------------##################################
 
 
 s3 = boto3.client('s3')
-
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+
+def model_fn(model_dir):
+    model = Net()
+    with open(os.path.join(model_dir, "model.pth"), "rb") as f:
+        model.load_state_dict(torch.load(f))
+    return model
+
+
+def save_model(model, model_dir):
+    logger.info("Saving the model.")
+    path = os.path.join(model_dir, "model.pth")
+    torch.save(model.cpu().state_dict(), path)
+
+
 
 
 def test(model, test_loader,criterion):
@@ -159,6 +126,7 @@ def train(model, train_loader, criterion, optimizer, epoch):
                 )
             )
 
+    save_model(model, args.model_dir)
     
 def net(args):
     '''
@@ -220,26 +188,38 @@ def main(args):
     loss_criterion = nn.CrossEntropyLoss(reduction='sum')
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     
+    train_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(10),
+                transforms.RandomResizedCrop(size=224,scale=(0.8, 1.0)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean = [0.485, 0.456, 0.406],
+                                    std = [0.229, 0.224, 0.225])
+            ])
+
+    test_transform = transforms.Compose([
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean = [0.485, 0.456, 0.406],
+                                        std = [0.229, 0.224, 0.225])
+                ])
     
-    train_dataset = ImageDataset("myimageclassificationbucket",Train=True)
-    test_dataset = ImageDataset("myimageclassificationbucket",Train=False)
+    
+    train_dataset = torchvision.datasets.ImageFolder(root="./train", transform = train_transform)
+    test_dataset = torchvision.datasets.ImageFolder(root="./test", transform = test_transform)
+    
     
     data = {"train":train_dataset, "test":test_dataset}
     
     dataloaders = create_data_loaders(data,args.batch_size)
-    
-    '''
-    TODO: Call the train function to start training your model
-    Remember that you will need to set up a way to get training data from S3
-    '''
+
     for epoch in range(args.epochs):
         train(model, dataloaders['train'], loss_criterion, optimizer, epoch)
         test(model, dataloaders['test'], loss_criterion)
     
-    '''
-    TODO: Save the trained model
-    '''
-    torch.save(model, "classificationmodel.pt")
+    
+    
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description="Deep Learning on Amazon Sagemaker")
@@ -262,6 +242,11 @@ if __name__=='__main__':
                    metavar="LR",
                    help="learning rate (default: 1.0)",
                    )
+    
+    parser.add_argument("--hosts", type=list, default=json.loads(os.environ["SM_HOSTS"]))
+    parser.add_argument("--current-host", type=str, default=os.environ["SM_CURRENT_HOST"])
+    parser.add_argument("--model-dir", type=str, default=os.environ["SM_MODEL_DIR"])
+    
     
     args = parser.parse_args()
     

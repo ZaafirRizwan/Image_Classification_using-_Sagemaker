@@ -16,14 +16,16 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 import logging
 import sys
+import time
 
 import argparse
-
 
 # For Profiling
 from smdebug import modes
 from smdebug.profiler.utils import str2bool
-import smdebug.pytorch as smd
+from smdebug.pytorch import get_hook
+
+
 
 #  For Debugging
 import smdebug.pytorch as smd
@@ -62,11 +64,8 @@ def test(model, test_loader,criterion,hook):
     '''
     
     # Setting SMDEBUG hook for testing Phase
+    model.eval()
     hook.set_mode(smd.modes.EVAL)
-    
-    if hook:
-        hook.register_loss(criterion)
-    
     test_loss = 0
     correct = 0
     loss = 0
@@ -105,15 +104,9 @@ def train(model, train_loader, criterion, optimizer, epoch,hook):
     '''
     
     model.fc.require_grad = True
-    
+    model. train()
     # Setting SMDEBUG hook for model training loop
     hook.set_mode(smd.modes.TRAIN)
-    
-    if hook:
-        hook.register_loss(criterion)
-    
-    
-    
     for batch_idx, (data, target) in enumerate(train_loader):
         data = data.to(device)
         target = target.to(device)
@@ -185,11 +178,9 @@ def main(args):
     # Initializing Model
     model = net(args)
     
-    ##################Debugging###################
-    # Registering SMDEBUG hook to save output tensors.
-    hook = smd.get_hook(create_if_not_exists=True)
+    hook = smd.Hook.create_from_json_file()
     hook.register_hook(model)
-    ##############################################
+    
     
     # Creating Loss Function and optimizer
     loss_criterion = nn.CrossEntropyLoss(reduction='sum')
@@ -213,10 +204,7 @@ def main(args):
                 ])
     
     
-    
-    
-    if hook:
-        hook.register_loss(loss_criterion)
+
             
     
     train_dataset = torchvision.datasets.ImageFolder(root="./train", transform = train_transform)
@@ -231,15 +219,23 @@ def main(args):
     TODO: Call the train function to start training your model
     Remember that you will need to set up a way to get training data from S3
     '''
+    
+    
+    epoch_times = []
     for epoch in range(args.epochs):
+        start = time.time()
         train(model, dataloaders['train'], loss_criterion, optimizer, epoch, hook)
         test(model, dataloaders['test'], loss_criterion, hook)
-        # save_model(model, args.model_dir)
+        epoch_time = time.time() - start
+        epoch_times.append(epoch_time)
     
+    
+    p50 = np.percentile(epoch_times, 50)
+    logger.info("Median training time per Epoch=%.1f sec" % p50)
     '''
     TODO: Save the trained model
     '''
-    torch.save(model, "classificationmodel.pt")
+    torch.save(model.state_dict(), "classificationmodel.pt")
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description="Deep Learning on Amazon Sagemaker")
