@@ -20,6 +20,8 @@ import time
 import json
 import os
 import io
+from sagemaker.serializers import JSONSerializer
+from sagemaker.deserializers import JSONDeserializer
 
 import argparse
 
@@ -76,7 +78,7 @@ def input_fn(request_body, request_content_type):
                                     std = [0.229, 0.224, 0.225])
             ])
 
-        deserialized_data = np.array(deserialized_data)
+        deserialized_data = np.array(deserialized_data['arr'])
         train_inputs = test_transform(deserialized_data)
         return train_inputs
 
