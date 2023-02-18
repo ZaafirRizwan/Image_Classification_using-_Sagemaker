@@ -7,7 +7,6 @@ import torchvision
 import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import boto3
 from torch.utils.data import Dataset
 import tempfile
 from PIL import Image
@@ -43,9 +42,6 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
-
-
-s3 = boto3.client('s3')
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
