@@ -8,7 +8,7 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from torch.utils.data import Dataset
-import tempfile
+import matplotlib.pyplot as plt
 from PIL import Image
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -33,7 +33,10 @@ def input_fn(request_body, request_content_type):
 
         deserialized_data = json.loads(request_body)
 
+        plt.imsave("image.png",deserialized_data['arr'])
 
+        data = Image.open("image.png")
+        
         test_transform = transforms.Compose([
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
@@ -41,10 +44,9 @@ def input_fn(request_body, request_content_type):
                                     std = [0.229, 0.224, 0.225])
             ])
 
-        deserialized_data = np.array(deserialized_data['arr'])
-        deserialized_data = Image.fromarray(deserialized_data)
         
-        train_inputs = test_transform(deserialized_data)
+        train_inputs = test_transform(data)
+        print(train_inputs)
 
         return train_inputs
 
@@ -55,6 +57,7 @@ def predict_fn(input_data, model):
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
+    input_data = torch.unsqueeze(input_data,0).to(device)
     model.eval()
     with torch.no_grad():
         return model(input_data)
