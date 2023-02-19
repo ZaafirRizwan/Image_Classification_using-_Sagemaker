@@ -20,50 +20,36 @@ import json
 
 import argparse
 
-# For Profiling
-from smdebug import modes
-from smdebug.profiler.utils import str2bool
-from smdebug.pytorch import get_hook
-
-
-
-#  For Debugging
-import smdebug.pytorch as smd
-import subprocess
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 def input_fn(request_body, request_content_type):
     """
     Deserialize and prepare the prediction input
-    """
+    """    
+    # Create an instance of the JSONDeserializer
 
-    
-    print("HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello1111111111111111111111111111111")
-    
-    if request_content_type == "application/json":
-        # Create an instance of the JSONDeserializer
+    # Deserialize the data using the JSONDeserializer
+    deserialized_data = json.loads(request_body.encode('utf-8'))
 
-        # Deserialize the data using the JSONDeserializer
-        deserialized_data = json.loads(BytesIO(serialized_data.encode('utf-8')), 'application/json')
-        test_transform = transforms.Compose([
-                transforms.ToPILImage(),
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean = [0.485, 0.456, 0.406],
-                                    std = [0.229, 0.224, 0.225])
-            ])
+    test_transform = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean = [0.485, 0.456, 0.406],
+                                std = [0.229, 0.224, 0.225])
+        ])
 
-        deserialized_data = np.array(deserialized_data['arr'])
-        train_inputs = test_transform(deserialized_data)
-        return train_inputs
+    deserialized_data = np.array(deserialized_data['arr'])
+    train_inputs = test_transform(deserialized_data)
+    print(train_inputs)
+    return train_inputs
 
     
 def predict_fn(input_data, model):
     """
     Apply model to the incoming request
     """
-    print("HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello22222222222222222222222222222")
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
@@ -71,9 +57,7 @@ def predict_fn(input_data, model):
         return model(input_data)
     
 
-def output_fn(prediction, content_type, context):
-    print("HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello33333333333333333333333333333333333333")
-    
+def output_fn(prediction_output, response_content_type):    
     if content_type == "application/json":
         data = {'body': prediction}
 
@@ -106,14 +90,14 @@ def net():
     pretrained_model.fc = nn.Linear(num_ftrs, 133)
 
     model_ft = pretrained_model.to(device)
+    print(model_ft)
     
-    return pretrained_model
+    return model_ft
     
 
     
-def model_fn(model_dir, context):
+def model_fn(model_dir):
     model = net()
-    print("HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello")
     with open(os.path.join(model_dir, 'model.pth'), 'rb') as f:
         model.load_state_dict(torch.load(f))
     return model    
