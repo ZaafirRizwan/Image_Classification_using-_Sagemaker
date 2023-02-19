@@ -17,8 +17,6 @@ import logging
 import sys
 import time
 import json
-import os
-import io
 from sagemaker.serializers import JSONSerializer
 from sagemaker.deserializers import JSONDeserializer
 
@@ -54,60 +52,11 @@ cmd = ['aws', 's3', 'sync', 's3://' + bucket_name, local_dir]
 subprocess.run(cmd,stdout=subprocess. DEVNULL)
 
 
-
-def input_fn(request_body, request_content_type):
-    """
-    Deserialize and prepare the prediction input
-    """
-
-    if request_content_type == "application/json":
-        # Create an instance of the JSONDeserializer
-        deserializer = JSONDeserializer()
-
-        # Deserialize the data using the JSONDeserializer
-        deserialized_data = deserializer.deserialize(BytesIO(serialized_data.encode('utf-8')), 'application/json')
-        test_transform = transforms.Compose([
-                transforms.ToPILImage(),
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean = [0.485, 0.456, 0.406],
-                                    std = [0.229, 0.224, 0.225])
-            ])
-
-        deserialized_data = np.array(deserialized_data['arr'])
-        train_inputs = test_transform(deserialized_data)
-        return train_inputs
-
 def save_model(model, model_dir):
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
     torch.save(model.cpu().state_dict(), path)
-
-    
-def predict_fn(input_data, model):
-    """
-    Apply model to the incoming request
-    """
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    model.eval()
-    with torch.no_grad():
-        return model(input_data)
-    
-
-def output_fn(prediction, content_type, context):
-    if content_type == "application/json":
-        data = {'body': prediction}
-        # Create an instance of the JSONSerializer
-        serializer = JSONSerializer()
-
-        # Serialize the data using the JSONSerializer
-        serialized_data = serializer.serialize(data)
         
-        return serialized_data
-    
-    
 
 def test(model, test_loader,criterion,hook):
     '''
@@ -184,6 +133,7 @@ def train(model, train_loader, criterion, optimizer, epoch,hook,args):
                     loss.item(),
                 )
             )
+        break
 
     save_model(model, args.model_dir)
     
@@ -212,16 +162,7 @@ def net():
     model_ft = pretrained_model.to(device)
     
     return pretrained_model
-    
-
-    
-def model_fn(model_dir, context):
-    model = net()
-    with open(os.path.join(model_dir, 'model.pth'), 'rb') as f:
-        model.load_state_dict(torch.load(f))
-    return model    
-    
-    
+        
 
 def create_data_loaders(data, batch_size):
     '''
