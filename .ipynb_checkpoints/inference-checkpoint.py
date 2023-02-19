@@ -17,6 +17,7 @@ import logging
 import sys
 import time
 import json
+import base64
 
 import argparse
 
@@ -27,23 +28,25 @@ def input_fn(request_body, request_content_type):
     """
     Deserialize and prepare the prediction input
     """    
-    # Create an instance of the JSONDeserializer
+    
+    if request_content_type == "application/json":
 
-    # Deserialize the data using the JSONDeserializer
-    deserialized_data = json.loads(request_body.encode('utf-8'))
+        deserialized_data = json.loads(request_body)
 
-    test_transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean = [0.485, 0.456, 0.406],
-                                std = [0.229, 0.224, 0.225])
-        ])
 
-    deserialized_data = np.array(deserialized_data['arr'])
-    train_inputs = test_transform(deserialized_data)
-    print(train_inputs)
-    return train_inputs
+        test_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean = [0.485, 0.456, 0.406],
+                                    std = [0.229, 0.224, 0.225])
+            ])
+
+        deserialized_data = np.array(deserialized_data['arr'])
+        deserialized_data = Image.fromarray(deserialized_data)
+        
+        train_inputs = test_transform(deserialized_data)
+
+        return train_inputs
 
     
 def predict_fn(input_data, model):
@@ -90,7 +93,6 @@ def net():
     pretrained_model.fc = nn.Linear(num_ftrs, 133)
 
     model_ft = pretrained_model.to(device)
-    print(model_ft)
     
     return model_ft
     
