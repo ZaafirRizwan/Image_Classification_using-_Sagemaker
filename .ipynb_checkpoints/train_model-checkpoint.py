@@ -52,10 +52,13 @@ cmd = ['aws', 's3', 'sync', 's3://' + bucket_name, local_dir]
 subprocess.run(cmd,stdout=subprocess. DEVNULL)
 
 
-def save_model(model, model_dir):
+def save_model(model, model_dir,image_dataset_train):
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
-    torch.save(model.cpu().state_dict(), path)
+    torch.save({
+            'model_state_dict': model.cpu().state_dict(),
+            'class_to_idx' : image_dataset_train.class_to_idx
+            }, path)
         
 
 def test(model, test_loader,criterion,hook):
@@ -133,9 +136,7 @@ def train(model, train_loader, criterion, optimizer, epoch,hook,args):
                     loss.item(),
                 )
             )
-        break
 
-    save_model(model, args.model_dir)
     
     
 def net():
@@ -236,6 +237,9 @@ def main(args):
         start = time.time()
         train(model, dataloaders['train'], loss_criterion, optimizer, epoch, hook,args)
         test(model, dataloaders['test'], loss_criterion, hook)
+        save_model(model, args.model_dir,train_dataset)
+        
+        
         epoch_time = time.time() - start
         epoch_times.append(epoch_time)
     

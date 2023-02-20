@@ -35,7 +35,7 @@ def input_fn(request_body, request_content_type):
 
         plt.imsave("image.png",deserialized_data['arr'])
 
-        data = Image.open("image.png")
+        data = Image.open("image.png").convert('RGB')
         
         test_transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -46,29 +46,53 @@ def input_fn(request_body, request_content_type):
 
         
         train_inputs = test_transform(data)
-        print(train_inputs)
-
+    
         return train_inputs
 
     
-def predict_fn(input_data, model):
+def predict_fn(input_data, diction):
     """
     Apply model to the incoming request
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = diction['model']
     model.to(device)
+    
+    
     input_data = torch.unsqueeze(input_data,0).to(device)
     model.eval()
-    with torch.no_grad():
-        return model(input_data)
+    with torch.no_grad():      
+        return {'predictions':model(input_data),'classes':diction['class_to_idx']}
     
 
 def output_fn(prediction_output, response_content_type):    
-    if content_type == "application/json":
-        data = {'body': prediction}
+    if response_content_type == "application/json":
+        
+        result = nn.functional.softmax(prediction_output['predictions'],dim=1)
+
+        prob = torch.topk(result, topk)[0][0].tolist()
+        indices = torch.topk(result, topk)[1][0].tolist()
+
+        for i in range(len(indices)):
+            for key, val in prediction_output['classes'].items():
+                if indices[i] == val:
+                    indices[i] = key
+        
+        name = []
+        for i in range(len(indices)):
+            for key, val in cat_to_name.items():
+                if indices[i] == key:
+                    name.append(val)
+                    break
+
+        
+        dictionary = {"name":name,"prob":prob}
+        
+        
+        data = {'body': dictionary}
 
         # Serialize the data using the JSONSerializer
-        serialized_data = json.dump(data)
+        serialized_data = json.dumps(data)
         
         return serialized_data
     
@@ -103,7 +127,10 @@ def net():
     
 def model_fn(model_dir):
     model = net()
-    with open(os.path.join(model_dir, 'model.pth'), 'rb') as f:
-        model.load_state_dict(torch.load(f))
-    return model    
+    with openos.path.join(model_dir, 'model.pth'), 'rb') as f:
+        checkpoint = torch.load(f)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        class_to_idx = checkpoint['class_to_idx']
+        
+    return {'model':model,'class_to_idx': class_to_idx}  
     

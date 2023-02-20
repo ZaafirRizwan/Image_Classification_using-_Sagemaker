@@ -17,14 +17,21 @@ Upload the data to an S3 bucket through the AWS Gateway so that SageMaker has ac
 ## Hyperparameter Tuning
 What kind of model did you choose for this experiment and why? Give an overview of the types of parameters and their ranges used for the hyperparameter search
 
+I chose resnet18 model for this project
+
+
 Remember that your README should:
 - Include a screenshot of completed training jobs
 - Logs metrics during the training process
 - Tune at least two hyperparameters
-- Retrieve the best best hyperparameters from all your training jobs
+- Retrieve the best hyperparameters from all your training jobs
 
 ## Debugging and Profiling
-**TODO**: Give an overview of how you performed model debugging and profiling in Sagemaker
+Debugging and Profiling Rules are defined using sagemaker utility.
+Debugging rules include vanishing_gradient,overfit,overtraining,poor_weight_initialization are used for improving model's performance.
+Profiling Rules include loss_not_decreasing, LowGPUUtilization. In this project no gpu instance was used for GPU Utilitzation is zero
+Then, Debug hook and profile config is defined. Debug hook is used for identifying and diagnosing any issues affecting model performance and profiling config is used for collecting resources metrics to identify potential bottlenecks during training process.
+   
 
 ### Results
 **TODO**: What are the results/insights did you get by profiling/debugging your model?
@@ -33,9 +40,18 @@ Remember that your README should:
 
 
 ## Model Deployment
-**TODO**: Give an overview of the deployed model and instructions on how to query the endpoint with a sample input.
+After training the model, model is deployed to an Endpoint for inference. 
+Method for deploying Endpoint:
+
+PytorchModel is used for deployment of model to an Endpoint. 
+Arguments:
+1. Entry_point:
+It takes inference.py (python file for loading the model and classifying input image) as argument where functions like model_fn, input_fn, predict_fn and output_fn are defined. 
+2. Source_dir:
+Path of inference.py file
+3. Role:
+Execution role
+4. Model:
+Path to Model Artifact
 
 **TODO** Remember to provide a screenshot of the deployed active endpoint in Sagemaker.
-
-## Standout Suggestions
-**TODO (Optional):** This is where you can provide information about any standout suggestions that you have attempted.

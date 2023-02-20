@@ -1,4 +1,3 @@
-#Dependencies
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,29 +6,39 @@ import torchvision
 import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import boto3
 from torch.utils.data import Dataset
 import tempfile
 from PIL import Image
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-import json
 import os
+import logging
+import sys
+import time
+import json
+from sagemaker.serializers import JSONSerializer
+from sagemaker.deserializers import JSONDeserializer
 
 import argparse
+
+# For Profiling
+from smdebug import modes
+from smdebug.profiler.utils import str2bool
+from smdebug.pytorch import get_hook
+
+
+
+#  For Debugging
+import smdebug.pytorch as smd
 import subprocess
+
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
-# For Profiling
-from smdebug import modes
-from smdebug.profiler.utils import str2bool 
-
-#  For Debugging
-import smdebug.pytorch as smd
 
 # Define the S3 bucket and local directory
 bucket_name = 'myimageclassificationbucket'
@@ -39,25 +48,13 @@ local_dir = './'
 cmd = ['aws', 's3', 'sync', 's3://' + bucket_name, local_dir]
 subprocess.run(cmd,stdout=subprocess. DEVNULL)
 
-
-
-s3 = boto3.client('s3')
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-
-def model_fn(model_dir):
-    model = Net()
-    with open(os.path.join(model_dir, "model.pth"), "rb") as f:
-        model.load_state_dict(torch.load(f))
-    return model
 
 
 def save_model(model, model_dir):
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
     torch.save(model.cpu().state_dict(), path)
-
-
 
 
 def test(model, test_loader,criterion):
