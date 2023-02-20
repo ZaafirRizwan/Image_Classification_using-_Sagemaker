@@ -42,9 +42,13 @@ Then, Debug hook and profile config is defined. Debug hook is used for identifyi
    
 
 ### Results
-**TODO**: What are the results/insights did you get by profiling/debugging your model?
+Debugging:
+In my case, I did not train my model for many epochs, so the accuracy I achieved was only 19%. However, if I had trained my model for more epochs, I 
+believe I could have achieved better results. 
 
-**TODO** Remember to provide the profiler html/pdf file in your submission.
+Profiling
+
+As far as profiling is concerned, I did not use a GPU, so the GPU utilization was zero. However, the loss was still decreasing, although the decrease ratio was not significant because I only trained my model for 2 epochs.
 
 
 ## Model Deployment
