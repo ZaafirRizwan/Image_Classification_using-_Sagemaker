@@ -55,7 +55,6 @@ def predict_fn(input_data, model):
     Apply model to the incoming request
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model1
     model['model'].to(device)
     input_data = torch.unsqueeze(input_data,0).to(device)
     model['model'].eval()
@@ -67,8 +66,8 @@ def output_fn(prediction_output, response_content_type):
     if response_content_type == "application/json":
         result = nn.functional.softmax(prediction_output['prediction'],dim=1)
 
-        prob = torch.topk(result, topk)[0][0].tolist()
-        indices = torch.topk(result, topk)[1][0].tolist()
+        prob = torch.topk(result, 5)[0][0].tolist()
+        indices = torch.topk(result, 5)[1][0].tolist()
 
         for i in range(len(indices)):
             for key, val in prediction_output['class'].items():
