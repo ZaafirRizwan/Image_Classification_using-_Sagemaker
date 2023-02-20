@@ -21,10 +21,18 @@ I chose resnet18 model for this project
 
 
 Remember that your README should:
-![alt text](./image.jpg)
-- Logs metrics during the training process
-- Tune at least two hyperparameters
-- Retrieve the best hyperparameters from all your training jobs
+Training Jobs:
+
+- ![alt text](./trainingjobs.png)
+
+Metrics Logging:
+- Metrics logged during training include epoch number, train-loss, test-loss and accuracy
+
+No. of hyperparameters Tuned:
+- 3 hyperparameters tuned and these hyperparameters are batch-size,epochs,learning-rate 
+
+Best Hyperparameters from hyperparameter tuning jobs:
+- 'batch-size': 64, 'epochs': 2, 'lr': 0.02504110549124806
 
 ## Debugging and Profiling
 Debugging and Profiling Rules are defined using sagemaker utility.
