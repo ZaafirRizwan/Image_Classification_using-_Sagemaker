@@ -23,7 +23,7 @@ I chose resnet18 model for this project
 Remember that your README should:
 Training Jobs:
 
-- ![alt text](./trainingjobs.png)
+ ![alt text](./trainingjobs.png)
 
 Metrics Logging:
 - Metrics logged during training include epoch number, train-loss, test-loss and accuracy
