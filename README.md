@@ -21,7 +21,7 @@ I chose resnet18 model for this project
 
 
 Remember that your README should:
-- Include a screenshot of completed training jobs
+![alt text](./image.jpg)
 - Logs metrics during the training process
 - Tune at least two hyperparameters
 - Retrieve the best hyperparameters from all your training jobs
