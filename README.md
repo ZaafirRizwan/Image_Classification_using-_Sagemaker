@@ -66,4 +66,4 @@ Execution role
 4. Model:
 Path to Model Artifact
 
-**TODO** Remember to provide a screenshot of the deployed active endpoint in Sagemaker.
+ ![alt text](./endpoint.png)
